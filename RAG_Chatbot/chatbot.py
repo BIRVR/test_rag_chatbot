@@ -23,7 +23,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter  # 경로 �
 from langchain_community.vectorstores import FAISS  # 경로 수정
 from langchain_core.prompts import ChatPromptTemplate  # 경로 수정
 from langchain.retrievers.multi_query import MultiQueryRetriever
-from langchain_core.schema import Document  # 경로 수정
+from langchain.schema import Document  # 경로 수정
 from langchain_core.output_parsers import StrOutputParser  # 경로 수정
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough  # 경로 수정
 
