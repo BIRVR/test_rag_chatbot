@@ -16,16 +16,16 @@ import json
 import logging
 
 # LangChain 관련 라이브러리 임포트
-from langchain.chat_models import ChatOpenAI  # 경로 수정
+from langchain_openai import ChatOpenAI  # 경로 수정
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.document_loaders import WebBaseLoader
-from langchain.text_splitters import RecursiveCharacterTextSplitter  # 경로 수정
-from langchain.vectorstores import FAISS  # ChromaDB 대신 FAISS 사용
-from langchain.prompts import ChatPromptTemplate  # 경로 수정
+from langchain_text_splitters import RecursiveCharacterTextSplitter  # 경로 수정
+from langchain_community.vectorstores import FAISS  # 경로 수정
+from langchain_core.prompts import ChatPromptTemplate  # 경로 수정
 from langchain.retrievers.multi_query import MultiQueryRetriever
-from langchain.schema import Document
-from langchain.output_parsers import StrOutputParser  # 경로 수정
-from langchain.chains import RunnableParallel, RunnablePassthrough  # 경로 수정
+from langchain_core.schema import Document  # 경로 수정
+from langchain_core.output_parsers import StrOutputParser  # 경로 수정
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough  # 경로 수정
 
 # .env 파일 사용을 위한 import 추가
 from dotenv import load_dotenv
