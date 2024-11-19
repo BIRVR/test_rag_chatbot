@@ -3,7 +3,6 @@
 #################################
 
 # SQLite3 관련 설정
-import sqlite3  # Python 기본 내장 모듈 사용
 import sys
 # __import__('pysqlite3')
 # sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
@@ -17,15 +16,16 @@ import json
 import logging
 
 # LangChain 관련 라이브러리 임포트
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain.chat_models import ChatOpenAI  # 경로 수정
+from langchain_openai import OpenAIEmbeddings
 from langchain_community.document_loaders import WebBaseLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.text_splitters import RecursiveCharacterTextSplitter  # 경로 수정
+from langchain.vectorstores import FAISS  # ChromaDB 대신 FAISS 사용
+from langchain.prompts import ChatPromptTemplate  # 경로 수정
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain.schema import Document
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+from langchain.output_parsers import StrOutputParser  # 경로 수정
+from langchain.chains import RunnableParallel, RunnablePassthrough  # 경로 수정
 
 # .env 파일 사용을 위한 import 추가
 from dotenv import load_dotenv
@@ -43,7 +43,8 @@ logging.basicConfig(
     filename='chatbot.log',  # 로그 파일명을 더 명확하게 변경
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    filemode='a'
+    filemode='a',
+    encoding='utf-8'  # 한글 로깅을 위한 인코딩 설정
 )
 
 #################################
@@ -51,7 +52,16 @@ logging.basicConfig(
 #################################
 
 # ChatGPT 모델 설정 (온도값이 낮을수록 더 사실적인 답변)
-chat_model = ChatOpenAI(model="gpt-4o-mini-2024-07-18", temperature=0.1)
+try:
+    # OpenAI API 키 확인
+    if not openai.api_key:
+        raise ValueError("OpenAI API 키가 설정되지 않았습니다.")
+    
+    # 모델 설정 (GPT-4 Mini 모델명으로 수정)
+    chat_model = ChatOpenAI(model="gpt-4o-mini-2024-07-18", temperature=0.1)
+except Exception as e:
+    st.error(f"API 설정 오류: {str(e)}")
+    st.stop()
 
 try:
     # 위키피디아에서 데이터 로드
@@ -73,16 +83,20 @@ except Exception as e:
 # 4. 벡터 데이터베이스 설정
 #################################
 
+# FAISS 인덱스 저장 경로 설정
+FAISS_INDEX_PATH = "faiss_index"
+
+# 벡터 데이터베이스 생성 또는 로드
 try:
     # 텍스트를 벡터로 변환하는 모델 설정
     embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
     # 벡터 데이터베이스 생성
-    vector_db = Chroma.from_documents(
+    vector_db = FAISS.from_documents(
         documents=split_texts,
-        embedding=embeddings_model,
-        persist_directory="./embedding_db/openai_large"
+        embedding=embeddings_model
     )
+    vector_db.save_local("faiss_index")
 
     # 다중 질의 검색기 설정 (더 정확한 답변을 위해 질문을 여러 방식으로 해석)
     retriever = MultiQueryRetriever.from_llm(
@@ -94,7 +108,7 @@ try:
     )
 
 except Exception as e:
-    st.error(f"벡터 데이터베이스 설정 중 오류 발생: {str(e)}")
+    st.error(f"벡터 데이터베이스 처리 중 오류 발생: {str(e)}")
     st.stop()
 
 #################################
@@ -117,7 +131,7 @@ user input: {input}
 prompt = ChatPromptTemplate.from_template(chat_template)
 
 # 검색과 응답 생성을 위한 처리 과정 설정
-retrieval_chain = RunnableParallel({"context": retriever, "input": RunnablePassthrough()})
+retrieval_chain = RunnableParallel({"context": vector_db.as_retriever(search_type="mmr", search_kwargs={'k': 5, 'fetch_k': 50}), "input": RunnablePassthrough()})
 response_chain = retrieval_chain | prompt | chat_model | StrOutputParser()
 
 #################################
@@ -140,8 +154,10 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# 최대 메시지 개수 설정 (메모리 관리를 위해)
+# 상수 정의를 파일 상단으로 이동
 MAX_MESSAGES = 4
+MAX_CHUNK_SIZE = 10000
+CHUNK_OVERLAP = 2000
 
 # 사용자 입력 처리
 if user_input := st.chat_input("질문을 입력하세요"):
@@ -170,14 +186,15 @@ if user_input := st.chat_input("질문을 입력하세요"):
             for chunk in result.split(" "):
                 full_response += chunk + " "
                 time.sleep(0.1)  # 타이핑 속도를 조금 더 빠르게 조정
-                message_placeholder.markdown(full_response + "▌")
+                message_placeholder.markdown(full_response + " ")
             message_placeholder.markdown(full_response)
 
+        except openai.error.InvalidRequestError as e:
+            st.error("OpenAI API 요청 오류: 입력이 너무 깁니다.")
+            logging.error(f"OpenAI API 오류: {str(e)}")
         except Exception as e:
-            error_message = f"응답 생성 중 오류가 발생했습니다: {str(e)}"
-            st.error(error_message)
-            logging.error(error_message)
-            full_response = "죄송합니다. 답변을 생성하는 중에 문제가 발생했습니다."
+            st.error(f"오류 발생: {str(e)}")
+            logging.error(f"일반 오류: {str(e)}")
 
     # AI 응답 저장
     st.session_state.messages.append({"role": "assistant", "content": full_response})
