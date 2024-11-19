@@ -36,7 +36,7 @@ load_dotenv()
 #################################
 
 # API 키는 환경변수에서 가져오기
-openai.api_key = os.environ.get("OPENAI_API_KEY")
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # 로깅 설정
 logging.basicConfig(
@@ -70,8 +70,8 @@ try:
 
     # 데이터를 작은 조각으로 분할 (더 효율적인 처리를 위해)
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=10000,  # 각 텍스트 조각의 크기
-        chunk_overlap=2000  # 조각 간 겹치는 부분 (문맥 유지를 위해)
+        chunk_size=5000,  # 10000에서 5000으로 줄임
+        chunk_overlap=1000  # 2000에서 1000으로 줄임
     )
     split_texts = text_splitter.split_documents(wiki_data)
 
@@ -86,26 +86,18 @@ except Exception as e:
 # FAISS 인덱스 저장 경로 설정
 FAISS_INDEX_PATH = "faiss_index"
 
-# 벡터 데이터베이스 생성 또는 로드
 try:
-    # 텍스트를 벡터로 변환하는 모델 설정
-    embeddings_model = OpenAIEmbeddings(model="text-embedding-3-large")
-
-    # 벡터 데이터베이스 생성
-    vector_db = FAISS.from_documents(
-        documents=split_texts,
-        embedding=embeddings_model
-    )
-    vector_db.save_local("faiss_index")
-
-    # 다중 질의 검색기 설정 (더 정확한 답변을 위해 질문을 여러 방식으로 해석)
-    retriever = MultiQueryRetriever.from_llm(
-        retriever=vector_db.as_retriever(
-            search_type="mmr",  # MMR: 다양성과 관련성을 모두 고려하는 검색 방식
-            search_kwargs={'k': 5, 'fetch_k': 50}
-        ),
-        llm=chat_model
-    )
+    # 기존 인덱스가 있으면 로드, 없으면 새로 생성
+    if os.path.exists(FAISS_INDEX_PATH):
+        vector_db = FAISS.load_local(FAISS_INDEX_PATH, embeddings_model)
+        print("기존 벡터 데이터베이스를 로드했습니다.")
+    else:
+        vector_db = FAISS.from_documents(
+            documents=split_texts,
+            embedding=embeddings_model
+        )
+        vector_db.save_local(FAISS_INDEX_PATH)
+        print("새로운 벡터 데이터베이스를 생성했습니다.")
 
 except Exception as e:
     st.error(f"벡터 데이터베이스 처리 중 오류 발생: {str(e)}")
